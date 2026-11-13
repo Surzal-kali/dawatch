@@ -129,7 +129,7 @@ static void emit_route(RouteKind kind, const char *reason){
 int main(int argc, char **argv){
     srand((unsigned)time(NULL));
     EngineConfig cfg = {
-        .baseline_interval_ms = 1000,
+        .baseline_interval_ms = 200,
         .poisson_lambda_per_min = 2.0,
         .k_sigma_event = 3.0,
         .ringbuf_capacity = 1024
@@ -165,8 +165,8 @@ int main(int argc, char **argv){
         if(s.now_ms >= s.next_baseline_tick_ms){
             s.next_baseline_tick_ms += cfg.baseline_interval_ms;
             double x = simulate_window_feature(&s);
-            update_baseline(&s, x);
             bool event = baseline_is_event(&s, x);
+            update_baseline(&s, x);
             printf("[BASELINE] n=%llu mean=%.2f var=%.2f x=%.2f event=%d\n",
                    (unsigned long long)s.baseline_n, s.baseline_mean, s.baseline_var, x, event);
             if(event){
