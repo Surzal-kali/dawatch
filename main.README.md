@@ -178,5 +178,48 @@ Net: the feasibility fight is almost entirely the wire lane; the rest are cheap.
 
 \---
 
+## 11\. Build + docs tier (for local-model sessions)
+
+These checklists are the repo's externalized memory for memoryless coding
+sessions — a request here never starts from scratch. Keep items anchored to
+greppable identifiers with red/green acceptance criteria; write expiring lore
+as criteria, not prose.
+
+### Shipped-demo reproducibility invariant
+
+- [ ] The committed demo config must demonstrably fire every implemented
+      trigger type within one run window. (History: the original 1000ms /
+      30-tick config shipped with the canary pop impossible — the `baseline_n
+      < 30` warm-up gate ate all 30 ticks and nothing in the output revealed
+      it; the earned tuning lived in chat, not the repo. `32fa247` fixed the
+      instance; this item makes it a rule.)
+
+### Build + smoke
+
+- [ ] Makefile: `-Wall -Wextra -lm`; targets `engine`, `canary_client`,
+      `canary_demo`, `smoke` (demo + client in one pass; grep the log for
+      each trigger line). Acceptance: `make smoke` red/green on a clean clone.
+- [ ] Delete `engine/engine_skeleton.c` (superseded by `engine.c`; duplicate
+      baselines diverge).
+- [ ] Seed the doc tier: an `AGENTS.md`-lite / `.github/copilot-instructions.md`
+      pointing at main.README, the per-lane checklists, and the lane
+      conformance block below.
+
+### Lane conformance (the shared bar; all five lanes + engine ingest)
+
+- [ ] Contact emission sets `payload_len` truthfully, never writes past the
+      bound; the engine slices on it. (Currently decorative on every path.)
+- [ ] Contacts ship lifetime ingress counters; the engine never derives
+      deltas from ring occupancy (`rb_count` wraps at saturation — wire lane
+      wraps in minutes).
+- [ ] Ring-buffer tests: eviction at saturation, wrap correctness, bounded
+      memory (capacity stays capacity — O(window), never O(events)).
+- [ ] Lane demos run end-to-end against a live engine socket: emit →
+      ingest → `rb_count` increments observed in the engine log.
+- [ ] Raw-content prohibitions (raw packets, PII payloads, real creds)
+      enforced as negative tests, not comments.
+
+\---
+
 *Two-week reality check: full thing, done well, is more than two weeks. Lock the spine — loop + introspection burst + thresholded router over a small feature-extracted PoC store. Learned decision model + detector-inversion + full active honeynet are stretch.*
 
