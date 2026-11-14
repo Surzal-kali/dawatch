@@ -4,6 +4,24 @@
 
 #define BLUEC_CONTRACT_VERSION 1
 
+/*
+ * On-wire conventions (pinned; see main.README §11 and engine.README):
+ *
+ * - Transport is a same-host AF_UNIX stream socket; structs are sent as
+ *   raw fixed-width binary in host (little-endian on x86-64) byte order.
+ *   Crossing hosts requires explicit endianness work first — do not assume.
+ * - Fixed-width integer fields only (intN and uintN types), ordered
+ *   largest-first so no implicit padding lands mid-struct; trailing padding
+ *   is guarded by the static asserts below. Same lesson as Score.reserved[3].
+ * - ContactReport.payload_len must be set to the number of bytes actually
+ *   packed into payload (never decorative). Readers slice to payload_len;
+ *   emitters must not write past 128.
+ * - Any change to these structs bumps BLUEC_CONTRACT_VERSION and must
+ *   update the static asserts — the build breaks loudly on drift instead
+ *   of corrupting traffic silently.
+ */
+#define BLUEC_STATIC_ASSERT(cond, name) typedef char name[(cond) ? 1 : -1]
+
 /* ---------- Core boundary objects ---------- */
 
 typedef struct {
@@ -85,3 +103,15 @@ typedef struct {
     double k_sigma_event;
     uint32_t ringbuf_capacity; // per lane
 } EngineConfig;
+
+/* ---------- Layout guards (fail the build on drift, do not "fix" silently) */
+
+BLUEC_STATIC_ASSERT(sizeof(Score) == 8, score_size);
+BLUEC_STATIC_ASSERT(sizeof(WindowFeatures) == 72, window_features_size);
+BLUEC_STATIC_ASSERT(sizeof(PoCDescriptor) == 136, poc_descriptor_size);
+BLUEC_STATIC_ASSERT(sizeof(Route) == 16, route_size);
+BLUEC_STATIC_ASSERT(sizeof(ContactReport) == 144, contact_report_size);
+BLUEC_STATIC_ASSERT(sizeof(BurstRequest) == 32, burst_request_size);
+BLUEC_STATIC_ASSERT(sizeof(EngineConfig) == 32, engine_config_size);
+BLUEC_STATIC_ASSERT(sizeof(((ContactReport *)0)->payload) == 128, contact_payload_capacity);
+

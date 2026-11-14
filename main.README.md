@@ -193,17 +193,29 @@ as criteria, not prose.
       < 30` warm-up gate ate all 30 ticks and nothing in the output revealed
       it; the earned tuning lived in chat, not the repo. `32fa247` fixed the
       instance; this item makes it a rule.)
+      (Progress 2026-11-14: random-trigger coverage fixed by demo λ=12/min;
+      smoke now greps baseline + random + socket-ingest. Remaining blocker:
+      the event trigger is impossible while canary self-dilution pins fused z
+      below k=3.0 — unblocks with the canary-split matrix item.)
 
 ### Build + smoke
 
-- [ ] Makefile: `-Wall -Wextra -lm`; targets `engine`, `canary_client`,
+- [x] Makefile: `-Wall -Wextra -lm`; targets `engine`, `canary_client`,
       `canary_demo`, `smoke` (demo + client in one pass; grep the log for
       each trigger line). Acceptance: `make smoke` red/green on a clean clone.
-- [ ] Delete `engine/engine_skeleton.c` (superseded by `engine.c`; duplicate
-      baselines diverge).
-- [ ] Seed the doc tier: an `AGENTS.md`-lite / `.github/copilot-instructions.md`
+      (Binaries land at the .gitignore'd paths: `engine/engine_demo`,
+      `honeyjars/canary_client`, `honeyjars/canary_demo`; smoke greps
+      baseline + random + socket-ingest lines. Warning-free under
+      -Wall -Wextra.)
+- [x] Delete `engine/engine_skeleton.c` (superseded by `engine.c`; duplicate
+      baselines diverge). Also deleted `engine/core.cpp` — superseded socket
+      scratch code with a divergent socket path.
+- [x] Seed the doc tier: an `AGENTS.md`-lite / `.github/copilot-instructions.md`
       pointing at main.README, the per-lane checklists, and the lane
-      conformance block below.
+      conformance block below. (`AGENTS.md` is the fuller operating notes +
+      "where the work is", which agents update at session close;
+      `.github/copilot-instructions.md` is the compact injected-prompt
+      version. Keep both in sync.)
 
 ### Lane conformance (the shared bar; all five lanes + engine ingest)
 

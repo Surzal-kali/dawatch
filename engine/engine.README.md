@@ -5,16 +5,16 @@ cross-lane fusion. Python owns orchestration and top-level integration.
 
 ## First milestone
 
-- [ ] Define versioned C contracts for `WindowFeatures`, `Score`,
+- [x] Define versioned C contracts for `WindowFeatures`, `Score`,
       `PoCDescriptor`, `Route`, contact reports, and burst requests.
 - [ ] Define ownership, lifetime, serialization, and error semantics for every
       contract crossing the C/Python boundary.
-- [ ] Implement the cheap always-on baseline sampling path.
-- [ ] Implement Poisson-distributed random sampling.
-- [ ] Implement event-triggered sampling from baseline deviation.
-- [ ] Add a bounded retained high-resolution ring-buffer interface for
+- [x] Implement the cheap always-on baseline sampling path.
+- [x] Implement Poisson-distributed random sampling.
+- [x] Implement event-triggered sampling from baseline deviation.
+- [x] Add a bounded retained high-resolution ring-buffer interface for
       retroactive burst promotion.
-- [ ] Implement per-lane contact ingestion without retaining traffic-volume
+- [x] Implement per-lane contact ingestion without retaining traffic-volume
       data in the monitor.
 - [ ] Implement cross-lane correlation over contacts and time.
 - [ ] Produce a per-channel footprint plus cross-channel correlation suitable
@@ -51,12 +51,17 @@ cross-lane fusion. Python owns orchestration and top-level integration.
       gate and nobody could tell from the output.
 - [ ] Ingest hardening: check `rb_push` returns; accept all pending
       connections per loop pass (currently max 1 per pass, 5ms sleep between).
-- [ ] `payload_len` discipline: readers slice to `payload_len`; emitters set
+- [x] `payload_len` discipline: readers slice to `payload_len`; emitters set
       it to bytes actually packed (currently 128 written vs 64 declared vs
       ~10 real — decorative on every path).
-- [ ] Pin the wire contract before any Python binding: fixed-width fields
+- [x] Pin the wire contract before any Python binding: fixed-width fields
       largest-first or explicit packing, `static_assert(sizeof(ContactReport)
       == N)` + endianness note (same lesson as `Score.reserved[3]`).
+      (Build-time guards added in `contracts.h`: all seven struct sizes
+      pinned with typedef-array asserts — ContactReport=144, Score=8,
+      WindowFeatures=72, PoCDescriptor=136, Route=16, BurstRequest=32,
+      EngineConfig=32 — plus endianness/payload_len on-wire conventions.
+      Python bindings remain gated on the ownership/lifetime item above.)
 - [ ] Swappable PRNG: seedable state behind an interface (demo `rand()` is
       fine; §9 tempo-poisoning work becomes a one-line swap; unifies the two
       U-draw idioms — engine.c line 73 guards div-zero, line 115 doesn't).

@@ -25,3 +25,9 @@ executed, while keeping local buffering and lane-specific processing local.
       window.
 - [ ] Define the containment and telemetry requirements for a reactive decoy
       endpoint.
+- [ ] Decide the remote-endpoint transport before building any non-local
+      collector (planned: PowerShell for Windows endpoints). Ingest is
+      same-host AF_UNIX today; cross-host contact shipping needs length-
+      framed messages, TLS or equivalent peer auth, and the endianness note
+      in contracts.h honored (fixed-width little-endian structs, pinned by
+      static asserts).

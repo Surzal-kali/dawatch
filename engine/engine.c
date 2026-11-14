@@ -146,11 +146,14 @@ static void emit_route(RouteKind kind, const char *reason){
     printf("[ROUTE] kind=%d ttl=%llu reason=%s\n", r.kind, (unsigned long long)r.ttl_ms, reason);
 }
 
-int main(int argc, char **argv){
+int main(void){
     srand((unsigned)time(NULL));
     EngineConfig cfg = {
         .baseline_interval_ms = 200,
-        .poisson_lambda_per_min = 2.0,
+        // demo config must demonstrably fire every fireable trigger within the
+        // 30s run window (main.README §11): a 12/min rate gives ~6 random
+        // bursts per run; at the old 2/min a run had ~37% chance of zero.
+        .poisson_lambda_per_min = 12.0,
         .k_sigma_event = 3.0,
         .ringbuf_capacity = 1024
     };
@@ -203,6 +206,8 @@ int main(int argc, char **argv){
     // usleep(5000);
     {
         struct timespec req = {0, 5 * 1000000};
+
+    
         nanosleep(&req, NULL);
     }
     printf("[CHECKIN] Demo completed successfully\n");

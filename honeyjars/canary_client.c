@@ -17,7 +17,7 @@ static uint64_t now_ms(void){
     return ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
 }
 
-int main(int argc, char **argv){
+int main(void){
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
     if(fd < 0){ perror("socket"); return 1; }
     struct sockaddr_un addr = {0};
@@ -32,8 +32,14 @@ int main(int argc, char **argv){
     cr.ts_ms = now_ms();
     cr.lane = 4;
     cr.kind = 1;
-    snprintf((char*)cr.payload, 64, "honey_%u", rand()%1000);
-    cr.payload_len = 64;
+    int written = snprintf((char*)cr.payload, sizeof(cr.payload), "honey_%u", rand()%1000);
+    if (written < 0) {
+        cr.payload_len = 0;
+    } else if ((size_t)written >= sizeof(cr.payload)) {
+        cr.payload_len = sizeof(cr.payload);
+    } else {
+        cr.payload_len = (uint16_t)written;
+    }
     write(fd, &cr, sizeof(cr));
     printf("Sent canary contact\n");
     close(fd);
