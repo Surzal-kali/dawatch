@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <sys/select.h>
 #include <math.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -14,6 +15,12 @@
 #include <errno.h>
 
 #define LANE_COUNT 5
+
+typedef enum {
+    CONTACT_CHECKIN = 1,       // engine-generated jitter/activity
+    CONTACT_HONEYPOT_TOUCH = 2,// real external interaction
+    CONTACT_CANARY_PROBE = 3   // scheduled inspection/probe
+} ContactKind;
 
 typedef struct {
     EngineConfig cfg;
@@ -25,6 +32,7 @@ typedef struct {
     uint64_t next_random_tick_ms;
     uint64_t now_ms;
     uint64_t lane_last_counts[LANE_COUNT];
+    uint64_t lane_ingress_counts[LANE_COUNT];
 } EngineState;
 
 static uint64_t now_ms(void){
@@ -97,13 +105,25 @@ static double simulate_window_feature(EngineState *s){
     if((rand() % 1000) < 200){ // ~20% per tick
         ContactReport cr = {0};
         cr.ts_ms = s->now_ms;
-        cr.lane = 4; // canary
-        cr.kind = 1; // read
+        cr.lane = 4;                  // canary/check-in sensor lane
+        cr.kind = CONTACT_CHECKIN;    // not an alert
         // minimal payload
-        snprintf((char*)cr.payload, 64, "canary_%u", rand()%100);
-        cr.payload_len = 64;
+        int written = snprintf(
+            (char *)cr.payload,
+            sizeof(cr.payload),
+            "canary_%u",
+            rand() % 100
+        );
+
+        if (written < 0) {
+            cr.payload_len = 0;
+        } else if ((size_t)written >= sizeof(cr.payload)) {
+            cr.payload_len = sizeof(cr.payload);
+        } else {
+            cr.payload_len = (uint16_t)written;
+        }
         rb_push(s->lane_buffers[4], &cr);
-        printf("[CANARY] touch injected at %llu ms\n", (unsigned long long)s->now_ms);
+        printf("[CHECKIN] synthetic touch injected ...\n");
     }
     // Compute delta canary contacts since last tick
     uint64_t cur_canary = rb_count(s->lane_buffers[4]);
@@ -179,12 +199,13 @@ int main(int argc, char **argv){
             printf("[RANDOM] Poisson trigger at %llu ms\n", (unsigned long long)s.now_ms);
             emit_route(ROUTE_BURST, "random unknown-unknown");
         }
+    }
     // usleep(5000);
     {
         struct timespec req = {0, 5 * 1000000};
         nanosleep(&req, NULL);
     }
-    }
+    printf("[CHECKIN] Demo completed successfully\n");
 
     for(int i=0;i<LANE_COUNT;i++){
         rb_destroy(s.lane_buffers[i]);

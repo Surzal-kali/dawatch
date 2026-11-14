@@ -54,3 +54,7 @@ bool baseline_is_event(EngineState *s, double x){
     double z = fabs(x - s->baseline_mean)/std;
     return z > s->cfg.k_sigma_event;
 }
+
+uint64_t delta =
+    s->lane_ingress_counts[4] - s->lane_last_counts[4];
+s->lane_last_counts[4] = s->lane_ingress_counts[4];
