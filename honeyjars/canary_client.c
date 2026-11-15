@@ -1,30 +1,19 @@
-#define _POSIX_C_SOURCE 200809L
-#define _XOPEN_SOURCE 700
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include "../engine/contracts.h"
-
-#define SOCKET_PATH "/tmp/bluec.socket"
+#include "../engine/platform.h"
 
 static uint64_t now_ms(void){
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
+    return bluec_now_ms();
 }
 
 int main(void){
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if(fd < 0){ perror("socket"); return 1; }
-    struct sockaddr_un addr = {0};
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path)-1);
-    if(connect(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0){
-        perror("connect");
+    bluec_platform_init();
+    bluec_fd_t fd = bluec_connect(bluec_socket_path());
+    if(fd == BLUEC_FD_INVALID){
+        fprintf(stderr, "canary_client: engine socket not reachable at %s\n", bluec_socket_path());
         return 1;
     }
     // send a canary contact
@@ -40,8 +29,12 @@ int main(void){
     } else {
         cr.payload_len = (uint16_t)written;
     }
-    write(fd, &cr, sizeof(cr));
+    if(bluec_write(fd, &cr, sizeof(cr)) != (int)sizeof(cr)){
+        fprintf(stderr, "canary_client: short/blocked send\n");
+        bluec_close(fd);
+        return 1;
+    }
     printf("Sent canary contact\n");
-    close(fd);
+    bluec_close(fd);
     return 0;
 }

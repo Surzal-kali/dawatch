@@ -50,6 +50,15 @@ its criteria are demonstrable in the repo.
 - Focused C tests (plain asserts, a `make test` target once tests exist) —
   no test framework; keep it gcc + make only.
 
+- **Windows host build** (engine native on the Windows desktop, Task
+  Scheduler): MSYS2 UCRT64 (`pacman -S mingw-w64-ucrt-x86_64-gcc make`)
+  resolves the mingw toolchain and `uname` so the Makefile picks
+  `platform_win32.c` + `-lws2_32`; MSYS2 bash runs `make smoke` natively.
+  Linux build is unchanged (POSIX passthrough shim). Socket path comes from
+  `BLUEC_SOCKET_PATH`, else `/tmp/bluec.socket` (POSIX) / `%TEMP%\bluec.socket`
+  (win32). platform.h owns every OS-sensitive call — lane/engine code must
+  not include winsock or POSIX socket headers directly.
+
 ## Hard rules (rationale in main.README §9–§11)
 
 - **Lane conformance bar** (main.README §11) applies to any lane code or

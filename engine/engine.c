@@ -1,20 +1,13 @@
-#define _POSIX_C_SOURCE 200809L
-#define _XOPEN_SOURCE 700
 #include "contracts.h"
 #include "ingest.h"
 #include "ringbuffer.h"
 #include "baseline.h"
+#include "platform.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
-#include <unistd.h>
-#include <sys/select.h>
 #include <math.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <fcntl.h>
-#include <errno.h>
 
 typedef enum {
     CONTACT_CHECKIN = 1,       // engine-generated jitter/activity
@@ -39,35 +32,27 @@ typedef struct {
 } EngineState;
 
 static uint64_t now_ms(void){
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
+    return bluec_now_ms();
 }
 
 static void emit_route(RouteKind kind, const char *reason);
 
-#define SOCKET_PATH "/tmp/bluec.socket"
-
-static int socket_init(void){
-    unlink(SOCKET_PATH);
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if(fd < 0) return -1;
-    struct sockaddr_un addr = {0};
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path)-1);
-    if(bind(fd, (struct sockaddr*)&addr, sizeof(addr)) < 0){ close(fd); return -1; }
-    if(listen(fd, 8) < 0){ close(fd); return -1; }
-    int flags = fcntl(fd, F_GETFL, 0);
-    fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+static bluec_fd_t socket_init(void){
+    bluec_fd_t fd = bluec_bind_listen(bluec_socket_path());
+    if(fd == BLUEC_FD_INVALID) return BLUEC_FD_INVALID;
+    if(bluec_set_nonblocking(fd, true) != 0){
+        bluec_close(fd);
+        return BLUEC_FD_INVALID;
+    }
     return fd;
 }
 
-static void socket_accept_and_push(int srv_fd, EngineState *s){
+static void socket_accept_and_push(bluec_fd_t srv_fd, EngineState *s){
     // hardening: accept ALL pending connections per loop pass, not just one
     for(;;){
-        int cfd = accept(srv_fd, NULL, NULL);
-        if(cfd < 0){
-            if(errno != EAGAIN && errno != EWOULDBLOCK)
+        bluec_fd_t cfd = bluec_accept(srv_fd);
+        if(cfd == BLUEC_FD_INVALID){
+            if(!bluec_would_block())
                 perror("accept");
             return;
         }
@@ -88,7 +73,7 @@ static void socket_accept_and_push(int srv_fd, EngineState *s){
             if(route == ROUTE_ALERT)
                 emit_route(ROUTE_ALERT, "canary touch");
         }
-        close(cfd);
+        bluec_close(cfd);
     }
 }
 
@@ -159,6 +144,7 @@ static void emit_route(RouteKind kind, const char *reason){
 }
 
 int main(void){
+    bluec_platform_init();
     srand((unsigned)time(NULL));
     EngineConfig cfg = {
         .baseline_interval_ms = 200,
@@ -189,7 +175,7 @@ int main(void){
 
     int srv_fd = socket_init();
     if(srv_fd < 0){ perror("socket_init"); return 1; }
-    printf("[SOCKET] listening on %s\n", SOCKET_PATH);
+    printf("[SOCKET] listening on %s\n", bluec_socket_path());
 
     uint64_t loop_end = s.now_ms + 30000; // run 30s demo
     while(s.now_ms < loop_end){
@@ -218,13 +204,7 @@ int main(void){
             emit_route(ROUTE_BURST, "random unknown-unknown");
         }
     }
-    // usleep(5000);
-    {
-        struct timespec req = {0, 5 * 1000000};
-
-    
-        nanosleep(&req, NULL);
-    }
+    bluec_sleep_ms(5);
     printf("[CHECKIN] Demo completed successfully\n");
     printf("[INGEST] lifetime ingress: wire=%llu endpoint=%llu auth=%llu api=%llu canary=%llu dropped=%llu malformed=%llu canary_alerts=%llu\n",
            (unsigned long long)s.ing.ingress[LANE_WIRE],
@@ -241,8 +221,8 @@ int main(void){
         rb_destroy(s.lane_buffers[i]);
     }
     featwin_destroy(s.featwin);
-    close(srv_fd);
-    unlink(SOCKET_PATH);
+    bluec_close(srv_fd);
+    bluec_unlink(bluec_socket_path());
     printf("Engine demo finished\n");
     return 0;
 }

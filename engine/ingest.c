@@ -1,7 +1,5 @@
 #include "ingest.h"
-#include <errno.h>
-#include <sys/socket.h>
-#include <unistd.h>
+#include "platform.h"
 
 bool ingest_validate(const ContactReport *cr){
     if(!cr) return false;
@@ -33,15 +31,15 @@ RouteKind ingest_contact(RingBuffer **lane_buffers, IngestCounters *stats,
     return ROUTE_CONTINUE;
 }
 
-int ingest_read_contact(int fd, ContactReport *out){
-    if(fd < 0 || !out) return -1;
+int ingest_read_contact(bluec_fd_t fd, ContactReport *out){
+    if(fd == BLUEC_FD_INVALID || !out) return -1;
     char *buf = (char *)out;
     size_t got = 0;
     while(got < sizeof(ContactReport)){
-        ssize_t n = recv(fd, buf + got, sizeof(ContactReport) - got, 0);
+        int n = bluec_recv(fd, buf + got, sizeof(ContactReport) - got);
         if(n == 0) return got > 0 ? -1 : 0;
         if(n < 0){
-            if(errno == EINTR) continue;
+            if(bluec_retry()) continue;
             return -1;
         }
         got += (size_t)n;

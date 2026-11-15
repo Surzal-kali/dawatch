@@ -1,6 +1,7 @@
 #pragma once
 #include "contracts.h"
 #include "ringbuffer.h"
+#include "platform.h"
 
 /*
  * Ingest path: validation, contact storage, lifetime per-lane counters, and
@@ -35,4 +36,4 @@ RouteKind ingest_contact(RingBuffer **lane_buffers, IngestCounters *stats,
  * reads, retries EINTR). Returns 1 report read, 0 clean EOF before any byte,
  * -1 malformed/short stream or bad args. Fixed-size framing means callers may
  * loop this to drain multiple reports per connection. */
-int ingest_read_contact(int fd, ContactReport *out);
+int ingest_read_contact(bluec_fd_t fd, ContactReport *out);

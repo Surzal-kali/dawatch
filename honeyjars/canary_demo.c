@@ -5,12 +5,11 @@
 #include <time.h>
 #include "../engine/ringbuffer.h"
 #include "../engine/contracts.h"
+#include "../engine/platform.h"
 #include "canary_contact.h"
 
 static uint64_t now_ms(void){
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
+    return bluec_now_ms();
 }
 
 int main(){

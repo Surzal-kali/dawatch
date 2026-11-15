@@ -1,38 +1,28 @@
-#define _POSIX_C_SOURCE 200809L
-#define _XOPEN_SOURCE 700
-#include "wire_flow.h"
-#include "wire_monitor.h"
-#include "wire_source.h"
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include <unistd.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-
-#define SOCKET_PATH "/tmp/bluec.socket"
+#include "wire_flow.h"
+#include "wire_monitor.h"
+#include "wire_source.h"
+#include "../engine/platform.h"
 
 static uint64_t now_ms(void){
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
+    return bluec_now_ms();
 }
 
 static void msleep(long ms){
-    struct timespec req = { ms / 1000, (ms % 1000) * 1000000 };
-    nanosleep(&req, NULL);
+    if(ms > 0 && (unsigned long)ms <= 0xFFFFFFFFUL) bluec_sleep_ms((uint32_t)ms);
 }
 
 /* Stream sockets may short-write; contacts are exactly sizeof(ContactReport)
  * and the engine's hardened reader expects whole reports. */
-static int write_all(int fd, const void *buf, size_t len){
+static int write_all(bluec_fd_t fd, const void *buf, size_t len){
     const char *p = buf;
     while(len){
-        ssize_t n = write(fd, p, len);
+        int n = bluec_write(fd, p, len);
         if(n < 0){
-            if(errno == EINTR) continue;
+            if(bluec_retry()) continue;
             return -1;
         }
         p += n;
@@ -42,7 +32,7 @@ static int write_all(int fd, const void *buf, size_t len){
 }
 
 typedef struct {
-    int fd;
+    bluec_fd_t fd;
     unsigned sent_tick, sent_beacon, sent_new_peer;
 } DemoOut;
 
@@ -88,26 +78,21 @@ static void on_contact(const ContactReport *cr, void *user){
     }
 }
 
-static int connect_engine(void){
+static bluec_fd_t connect_engine(void){
     for(int attempt = 0; attempt < 20; attempt++){
-        int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-        if(fd < 0){ perror("socket"); return -1; }
-        struct sockaddr_un addr = {0};
-        addr.sun_family = AF_UNIX;
-        strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
-        if(connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) return fd;
-        close(fd);
+        bluec_fd_t fd = bluec_connect(bluec_socket_path());
+        if(fd != BLUEC_FD_INVALID) return fd;
         msleep(300);
     }
-    fprintf(stderr, "wire_demo: engine socket not reachable at %s\n", SOCKET_PATH);
-    return -1;
+    fprintf(stderr, "wire_demo: engine socket not reachable at %s\n", bluec_socket_path());
+    return BLUEC_FD_INVALID;
 }
 
 int main(int argc, char **argv){
     int duration_s = argc > 1 ? atoi(argv[1]) : 8;
     if(duration_s <= 0) duration_s = 8;
 
-    DemoOut out = { .fd = -1 };
+    DemoOut out = { .fd = BLUEC_FD_INVALID };
     out.fd = connect_engine();
     if(out.fd < 0) return 1;
 
@@ -151,6 +136,6 @@ int main(int argc, char **argv){
 
     wire_source_destroy(src);
     wire_monitor_destroy(mon);
-    close(out.fd);
+    bluec_close(out.fd);
     return 0;
 }

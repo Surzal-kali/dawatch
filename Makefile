@@ -3,6 +3,15 @@ CC      := gcc
 CFLAGS  := -std=c11 -Wall -Wextra -O2
 LDLIBS  := -lm
 
+# Platform shim: winsock port on mingw, POSIX passthrough otherwise
+UNAME_S := $(shell uname -s)
+ifeq ($(findstring MINGW,$(UNAME_S)),MINGW)
+PLATFORM_SRC := engine/platform_win32.c
+LDLIBS       += -lws2_32
+else
+PLATFORM_SRC := engine/platform_posix.c
+endif
+
 ENGINE  := engine/engine_demo
 CLIENT  := honeyjars/canary_client
 DEMO    := honeyjars/canary_demo
@@ -16,21 +25,21 @@ SMOKE_LOG := /tmp/dawatch_smoke.log
 
 all: $(ENGINE) $(CLIENT) $(DEMO)
 
-$(ENGINE): engine/engine.c engine/ingest.c engine/ringbuffer.c engine/baseline.c engine/contracts.h engine/ingest.h engine/ringbuffer.h engine/baseline.h
-	$(CC) $(CFLAGS) -o $@ engine/engine.c engine/ingest.c engine/ringbuffer.c engine/baseline.c $(LDLIBS)
+$(ENGINE): engine/engine.c engine/ingest.c engine/ringbuffer.c engine/baseline.c engine/platform.h engine/platform_posix.c engine/platform_win32.c engine/contracts.h engine/ingest.h engine/ringbuffer.h engine/baseline.h
+	$(CC) $(CFLAGS) -o $@ engine/engine.c engine/ingest.c engine/ringbuffer.c engine/baseline.c $(PLATFORM_SRC) $(LDLIBS)
 
-$(CLIENT): honeyjars/canary_client.c engine/contracts.h
-	$(CC) $(CFLAGS) -o $@ honeyjars/canary_client.c
+$(CLIENT): honeyjars/canary_client.c engine/contracts.h engine/platform.h engine/platform_posix.c engine/platform_win32.c
+	$(CC) $(CFLAGS) -o $@ honeyjars/canary_client.c $(PLATFORM_SRC) $(LDLIBS)
 
 $(DEMO): honeyjars/canary_demo.c honeyjars/canary_contact.h engine/ringbuffer.c engine/ringbuffer.h engine/contracts.h
-	$(CC) $(CFLAGS) -o $@ honeyjars/canary_demo.c engine/ringbuffer.c $(LDLIBS)
+	$(CC) $(CFLAGS) -o $@ honeyjars/canary_demo.c engine/ringbuffer.c $(PLATFORM_SRC) $(LDLIBS)
 
 # focused C tests — plain asserts, no test framework (gcc + make only)
 $(TEST_RB): engine/test_ringbuffer.c engine/ringbuffer.c engine/ringbuffer.h engine/contracts.h
 	$(CC) $(CFLAGS) -o $@ engine/test_ringbuffer.c engine/ringbuffer.c
 
-$(TEST_ING): engine/test_ingest.c engine/ingest.c engine/ringbuffer.c engine/ingest.h engine/ringbuffer.h engine/contracts.h
-	$(CC) $(CFLAGS) -o $@ engine/test_ingest.c engine/ingest.c engine/ringbuffer.c
+$(TEST_ING): engine/test_ingest.c engine/ingest.c engine/ringbuffer.c engine/ingest.h engine/ringbuffer.h engine/contracts.h engine/platform.h engine/platform_posix.c engine/platform_win32.c
+	$(CC) $(CFLAGS) -o $@ engine/test_ingest.c engine/ingest.c engine/ringbuffer.c $(PLATFORM_SRC)
 
 $(TEST_BAS): engine/test_baseline.c engine/baseline.c engine/baseline.h
 	$(CC) $(CFLAGS) -o $@ engine/test_baseline.c engine/baseline.c $(LDLIBS)
@@ -41,8 +50,8 @@ test: $(TEST_RB) $(TEST_ING) $(TEST_BAS) $(WIRE_TEST)
 	$(TEST_BAS)
 	$(WIRE_TEST)
 
-$(WIRE_DEMO): wires/wire_demo.c wires/wire_flow.c wires/wire_flow.h wires/wire_monitor.c wires/wire_monitor.h wires/wire_source.c wires/wire_source.h engine/ringbuffer.c engine/ringbuffer.h engine/contracts.h
-	$(CC) $(CFLAGS) -o $@ wires/wire_demo.c wires/wire_flow.c wires/wire_monitor.c wires/wire_source.c engine/ringbuffer.c $(LDLIBS)
+$(WIRE_DEMO): wires/wire_demo.c wires/wire_flow.c wires/wire_flow.h wires/wire_monitor.c wires/wire_monitor.h wires/wire_source.c wires/wire_source.h engine/ringbuffer.c engine/ringbuffer.h engine/contracts.h engine/platform.h engine/platform_posix.c engine/platform_win32.c
+	$(CC) $(CFLAGS) -o $@ wires/wire_demo.c wires/wire_flow.c wires/wire_monitor.c wires/wire_source.c engine/ringbuffer.c $(PLATFORM_SRC) $(LDLIBS)
 
 $(WIRE_TEST): wires/test_wire.c wires/wire_flow.c wires/wire_flow.h wires/wire_monitor.c wires/wire_monitor.h engine/ringbuffer.c engine/ringbuffer.h engine/contracts.h
 	$(CC) $(CFLAGS) -o $@ wires/test_wire.c wires/wire_flow.c wires/wire_monitor.c engine/ringbuffer.c $(LDLIBS)
