@@ -3,13 +3,20 @@ CC      := gcc
 CFLAGS  := -std=c11 -Wall -Wextra -O2
 LDLIBS  := -lm
 
-# Platform shim: winsock port on mingw, POSIX passthrough otherwise
-UNAME_S := $(shell uname -s)
+# Platform shim: winsock port on Windows, POSIX passthrough otherwise.
+# $(OS)=Windows_NT detection works in any shell (cmd, PowerShell); the
+# MINGW uname check remains as the MSYS2/Git Bash terminal fallback.
+ifeq ($(OS),Windows_NT)
+PLATFORM_SRC := engine/platform_win32.c
+LDLIBS       += -lws2_32
+else
+UNAME_S := $(shell uname -s 2>/dev/null)
 ifeq ($(findstring MINGW,$(UNAME_S)),MINGW)
 PLATFORM_SRC := engine/platform_win32.c
 LDLIBS       += -lws2_32
 else
 PLATFORM_SRC := engine/platform_posix.c
+endif
 endif
 
 ENGINE  := engine/engine_demo

@@ -51,13 +51,18 @@ its criteria are demonstrable in the repo.
   no test framework; keep it gcc + make only.
 
 - **Windows host build** (engine native on the Windows desktop, Task
-  Scheduler): MSYS2 UCRT64 (`pacman -S mingw-w64-ucrt-x86_64-gcc make`)
-  resolves the mingw toolchain and `uname` so the Makefile picks
-  `platform_win32.c` + `-lws2_32`; MSYS2 bash runs `make smoke` natively.
-  Linux build is unchanged (POSIX passthrough shim). Socket path comes from
-  `BLUEC_SOCKET_PATH`, else `/tmp/bluec.socket` (POSIX) / `%TEMP%\bluec.socket`
-  (win32). platform.h owns every OS-sensitive call — lane/engine code must
-  not include winsock or POSIX socket headers directly.
+  Scheduler): NO package manager required — a standalone mingw-w64
+  toolchain zip (winlibs.com or niXman mingw-builds; UCRT runtime;
+  `afunix.h` ships in mingw-w64 headers) plus GNU make for Windows, both
+  on PATH. Platform detection is `$(OS)=Windows_NT` (set by cmd and
+  PowerShell), with the MINGW-uname check as the MSYS2/Git Bash fallback —
+  picks `platform_win32.c` + `-lws2_32`. `make all/test` run in any VS
+  Code terminal; `make smoke`'s recipe is a bash script, so run it from
+  Git Bash or MSYS2. Linux build is unchanged (POSIX passthrough shim).
+  Socket path comes from `BLUEC_SOCKET_PATH`, else `/tmp/bluec.socket`
+  (POSIX) / `%TEMP%\bluec.socket` (win32). platform.h owns every
+  OS-sensitive call — lane/engine code must not include winsock or POSIX
+  socket headers directly.
 
 ## Hard rules (rationale in main.README §9–§11)
 
