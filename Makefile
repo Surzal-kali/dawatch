@@ -100,6 +100,17 @@ smoke: $(ENGINE) $(CLIENT) $(WIRE_DEMO) test
 	exit $$status
 
 clean:
-	del /f /q $(ENGINE) $(CLIENT) $(DEMO) $(TEST_RB) $(TEST_ING) $(TEST_BAS) $(WIRE_DEMO) $(WIRE_TEST) $(SMOKE_LOG) $(WIRE_LOG) 2>nul || exit 0
+ifeq ($(OS),Windows_NT)
+	cmd.exe /c "if exist .\engine\engine_demo.exe del /f /q .\engine\engine_demo.exe"
+	cmd.exe /c "if exist .\honeyjars\canary_client.exe del /f /q .\honeyjars\canary_client.exe"
+	cmd.exe /c "if exist .\honeyjars\canary_demo.exe del /f /q .\honeyjars\canary_demo.exe"
+	cmd.exe /c "if exist .\engine\test_ringbuffer.exe del /f /q .\engine\test_ringbuffer.exe"
+	cmd.exe /c "if exist .\engine\test_ingest.exe del /f /q .\engine\test_ingest.exe"
+	cmd.exe /c "if exist .\engine\test_baseline.exe del /f /q .\engine\test_baseline.exe"
+	cmd.exe /c "if exist .\wires\wire_demo.exe del /f /q .\wires\wire_demo.exe"
+	cmd.exe /c "if exist .\wires\test_wire.exe del /f /q .\wires\test_wire.exe"
+else
+	rm -f $(ENGINE) $(CLIENT) $(DEMO) $(TEST_RB) $(TEST_ING) $(TEST_BAS) $(WIRE_DEMO) $(WIRE_TEST) $(SMOKE_LOG) $(WIRE_LOG)
+endif
 
 .PHONY: all smoke test clean
