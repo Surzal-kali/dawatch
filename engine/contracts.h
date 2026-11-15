@@ -76,6 +76,18 @@ typedef struct {
     uint64_t ttl_ms;
 } Route;
 
+/* Lane identifiers for ContactReport.lane. Numbering is already pinned by
+ * the ContactReport comment below and the static asserts; this names them.
+ * Adding names does not change struct layout (no contract-version bump). */
+typedef enum {
+    LANE_WIRE = 0,
+    LANE_ENDPOINT = 1,
+    LANE_AUTH = 2,
+    LANE_API = 3,
+    LANE_CANARY = 4,
+    LANE_COUNT = 5
+} BluecLane;
+
 /* ---------- Lane contact reports ---------- */
 
 typedef struct {

@@ -187,16 +187,18 @@ as criteria, not prose.
 
 ### Shipped-demo reproducibility invariant
 
-- [ ] The committed demo config must demonstrably fire every implemented
+- [x] The committed demo config must demonstrably fire every implemented
       trigger type within one run window. (History: the original 1000ms /
       30-tick config shipped with the canary pop impossible — the `baseline_n
       < 30` warm-up gate ate all 30 ticks and nothing in the output revealed
       it; the earned tuning lived in chat, not the repo. `32fa247` fixed the
       instance; this item makes it a rule.)
-      (Progress 2026-11-14: random-trigger coverage fixed by demo λ=12/min;
-      smoke now greps baseline + random + socket-ingest. Remaining blocker:
-      the event trigger is impossible while canary self-dilution pins fused z
-      below k=3.0 — unblocks with the canary-split matrix item.)
+      (2026-11-14: with the canary split landed, smoke greps every implemented
+      trigger in one run — baseline ticks, genuine event deviation
+      (`[BASELINE] ... event=1` via a Poisson-jittered demo spike scenario,
+      its own λ=20/min so one 30s window essentially always contains a
+      post-warm-up spike), random burst, socket ingestion, canary-touch
+      `ROUTE_ALERT`, and the clean-finish line.)
 
 ### Build + smoke
 
@@ -220,12 +222,21 @@ as criteria, not prose.
 ### Lane conformance (the shared bar; all five lanes + engine ingest)
 
 - [ ] Contact emission sets `payload_len` truthfully, never writes past the
-      bound; the engine slices on it. (Currently decorative on every path.)
+      bound; the engine slices on it. (Progress 2026-11-14: engine ingest now
+      validates `payload_len` ≤ 128 and rejects violators as malformed;
+      demo emitters set truthful lengths. "The engine slices on it" lands
+      with the first payload-parsing monitor path.)
 - [ ] Contacts ship lifetime ingress counters; the engine never derives
       deltas from ring occupancy (`rb_count` wraps at saturation — wire lane
       wraps in minutes).
-- [ ] Ring-buffer tests: eviction at saturation, wrap correctness, bounded
+      (Progress 2026-11-14: engine side landed — `IngestCounters.ingress[]`
+      lifetime totals bumped in the push path, never derived from occupancy
+      (test_ingest saturation case). Lane emitters don't exist yet; their
+      reports/tests land here.)
+- [x] Ring-buffer tests: eviction at saturation, wrap correctness, bounded
       memory (capacity stays capacity — O(window), never O(events)).
+      (2026-11-14 landed: `engine/test_ringbuffer.c` under `make test`,
+      covering the shared `engine/ringbuffer.c` that lanes build on.)
 - [ ] Lane demos run end-to-end against a live engine socket: emit →
       ingest → `rb_count` increments observed in the engine log.
 - [ ] Raw-content prohibitions (raw packets, PII payloads, real creds)

@@ -2,3 +2,5 @@
 honeyjars/canary_demo
 honeyjars/canary_client
 engine/engine_demo
+engine/test_ringbuffer
+engine/test_ingest

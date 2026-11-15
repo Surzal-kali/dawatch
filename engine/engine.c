@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 #define _XOPEN_SOURCE 700
 #include "contracts.h"
+#include "ingest.h"
 #include "ringbuffer.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,25 +15,28 @@
 #include <fcntl.h>
 #include <errno.h>
 
-#define LANE_COUNT 5
-
 typedef enum {
     CONTACT_CHECKIN = 1,       // engine-generated jitter/activity
     CONTACT_HONEYPOT_TOUCH = 2,// real external interaction
     CONTACT_CANARY_PROBE = 3   // scheduled inspection/probe
 } ContactKind;
 
+/* Demo/SMOKE fiction: rate of the genuine-deviation spike scenario. Poisson,
+ * slightly above the random-burst lambda so a 30s run essentially always has
+ * a spike after the 30-sample warm-up for the event trigger to catch. */
+#define DEMO_SPIKE_LAMBDA_PER_MIN 20.0
+
 typedef struct {
     EngineConfig cfg;
     RingBuffer *lane_buffers[LANE_COUNT];
+    IngestCounters ing;
     double baseline_mean;
     double baseline_var;
     uint64_t baseline_n;
     uint64_t next_baseline_tick_ms;
     uint64_t next_random_tick_ms;
+    uint64_t next_spike_tick_ms;
     uint64_t now_ms;
-    uint64_t lane_last_counts[LANE_COUNT];
-    uint64_t lane_ingress_counts[LANE_COUNT];
 } EngineState;
 
 static uint64_t now_ms(void){
@@ -40,6 +44,8 @@ static uint64_t now_ms(void){
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
 }
+
+static void emit_route(RouteKind kind, const char *reason);
 
 #define SOCKET_PATH "/tmp/bluec.socket"
 
@@ -58,23 +64,33 @@ static int socket_init(void){
 }
 
 static void socket_accept_and_push(int srv_fd, EngineState *s){
-    int cfd = accept(srv_fd, NULL, NULL);
-    if(cfd < 0){
-        if(errno != EAGAIN && errno != EWOULDBLOCK)
-            perror("accept");
-        return;
-    }
-    // read ContactReport
-    ContactReport cr;
-    ssize_t n = read(cfd, &cr, sizeof(cr));
-    if(n == sizeof(cr)){
-        if(cr.lane < LANE_COUNT){
-            rb_push(s->lane_buffers[cr.lane], &cr);
+    // hardening: accept ALL pending connections per loop pass, not just one
+    for(;;){
+        int cfd = accept(srv_fd, NULL, NULL);
+        if(cfd < 0){
+            if(errno != EAGAIN && errno != EWOULDBLOCK)
+                perror("accept");
+            return;
+        }
+        // drain every contact the connection carries before closing
+        ContactReport cr;
+        for(;;){
+            int rc = ingest_read_contact(cfd, &cr);
+            if(rc <= 0) break;
+            if(!ingest_validate(&cr)){
+                s->ing.malformed++;
+                printf("[INGEST] malformed contact rejected lane=%u payload_len=%u\n",
+                       cr.lane, cr.payload_len);
+                continue;
+            }
+            RouteKind route = ingest_contact(s->lane_buffers, &s->ing, &cr, true);
             printf("[SOCKET] received contact lane=%d kind=%d ts=%llu\n",
                    cr.lane, cr.kind, (unsigned long long)cr.ts_ms);
+            if(route == ROUTE_ALERT)
+                emit_route(ROUTE_ALERT, "canary touch");
         }
+        close(cfd);
     }
-    close(cfd);
 }
 
 static double poisson_interval_ms(double lambda_per_min){
@@ -101,12 +117,14 @@ static bool baseline_is_event(EngineState *s, double x){
 }
 
 static double simulate_window_feature(EngineState *s){
-    // Inject canary touches with small probability
+    // Synthetic canary liveness: engine-generated, so no ALERT and no say in
+    // the fused scalar (canary split — engine.README matrix). Still stored and
+    // counted on its lane so the buffer/counter paths stay exercised.
     if((rand() % 1000) < 200){ // ~20% per tick
         ContactReport cr = {0};
         cr.ts_ms = s->now_ms;
-        cr.lane = 4;                  // canary/check-in sensor lane
-        cr.kind = CONTACT_CHECKIN;    // not an alert
+        cr.lane = LANE_CANARY;
+        cr.kind = CONTACT_CHECKIN;
         // minimal payload
         int written = snprintf(
             (char *)cr.payload,
@@ -122,20 +140,20 @@ static double simulate_window_feature(EngineState *s){
         } else {
             cr.payload_len = (uint16_t)written;
         }
-        rb_push(s->lane_buffers[4], &cr);
+        ingest_contact(s->lane_buffers, &s->ing, &cr, false);
         printf("[CHECKIN] synthetic touch injected ...\n");
     }
-    // Compute delta canary contacts since last tick
-    uint64_t cur_canary = rb_count(s->lane_buffers[4]);
-    uint64_t delta_canary = cur_canary - s->lane_last_counts[4];
-    s->lane_last_counts[4] = cur_canary;
-    // Base simulated activity
+    // Genuine deviation scenario for the demo/SMOKE: spike arrivals are
+    // Poisson-drawn (own demo rate, never a fixed tempo). These are the
+    // windows event triggers are meant to catch.
     double base = 10.0;
-    if((rand() % 1000) < 5) base += 40.0; // 0.5% spike
+    if(s->now_ms >= s->next_spike_tick_ms){
+        s->next_spike_tick_ms = s->now_ms +
+            (uint64_t)poisson_interval_ms(DEMO_SPIKE_LAMBDA_PER_MIN);
+        base += 40.0;
+    }
     base += ((double)rand() / RAND_MAX - 0.5) * 2.0;
-    // Weight canary heavily
-    double x = base + delta_canary * 100.0;
-    return x;
+    return base;
 }
 
 static void emit_route(RouteKind kind, const char *reason){
@@ -166,10 +184,10 @@ int main(void){
     s.baseline_mean = 0;
     s.baseline_var = 0;
     s.baseline_n = 0;
-    memset(s.lane_last_counts, 0, sizeof(s.lane_last_counts));
     s.now_ms = now_ms();
     s.next_baseline_tick_ms = s.now_ms + cfg.baseline_interval_ms;
     s.next_random_tick_ms = s.now_ms + (uint64_t)poisson_interval_ms(cfg.poisson_lambda_per_min);
+    s.next_spike_tick_ms = s.now_ms + (uint64_t)poisson_interval_ms(DEMO_SPIKE_LAMBDA_PER_MIN);
 
     printf("Engine starting: baseline_interval=%llu ms, lambda=%.2f/min, k=%.1f\n",
            (unsigned long long)cfg.baseline_interval_ms,
@@ -211,6 +229,15 @@ int main(void){
         nanosleep(&req, NULL);
     }
     printf("[CHECKIN] Demo completed successfully\n");
+    printf("[INGEST] lifetime ingress: wire=%llu endpoint=%llu auth=%llu api=%llu canary=%llu dropped=%llu malformed=%llu canary_alerts=%llu\n",
+           (unsigned long long)s.ing.ingress[LANE_WIRE],
+           (unsigned long long)s.ing.ingress[LANE_ENDPOINT],
+           (unsigned long long)s.ing.ingress[LANE_AUTH],
+           (unsigned long long)s.ing.ingress[LANE_API],
+           (unsigned long long)s.ing.ingress[LANE_CANARY],
+           (unsigned long long)s.ing.dropped,
+           (unsigned long long)s.ing.malformed,
+           (unsigned long long)s.ing.canary_alerts);
 
     for(int i=0;i<LANE_COUNT;i++){
         rb_destroy(s.lane_buffers[i]);

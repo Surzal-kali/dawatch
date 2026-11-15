@@ -80,11 +80,13 @@ its criteria are demonstrable in the repo.
 - Done (2026-11-14, tier 1 reproducibility): Makefile + smoke, wire-contract
   pinning, deletion of `engine_skeleton.c`/`core.cpp`, demo λ raised for
   smoke determinism. See §11 ticks.
-- Next: `engine/engine.README.md` "Detection correctness" matrix. First
-  sweep: per-lane ingress counters + ingest hardening + canary split
-  (`ROUTE_ALERT` for canary touches) — all three touch the same ingest path
-  and want to land together. Then windowed baseline stats, warm-up honesty
-  line, canary cadence tick, swappable PRNG.
-- Known intentional gap: smoke cannot check the event-trigger line yet —
-  canary self-dilution pins the fused z below k=3.0 until the canary split
-  lands (main.README §11 invariant note).
+- Done (2026-11-14, ingest first sweep): per-lane lifetime ingress counters +
+  ingest hardening + canary split (`ROUTE_ALERT` for external canary touches)
+  landed together via `engine/ingest.{c,h}`; `make test` now runs
+  ring-buffer + ingest suites; smoke covers every implemented trigger
+  including the event line. See §11 + engine.README ticks.
+- Next: remaining "Detection correctness" matrix items — windowed baseline
+  stats (cumulative Welford variance climbs monotonically), warm-up honesty
+  line, canary cadence tick, swappable PRNG. Then lane build-out, wire lane
+  first (flow-feature shape → contact emission → ring buffer → demo →
+  tests, per the §11 lane conformance bar).
