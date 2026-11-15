@@ -2,9 +2,8 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
 #include "contracts.h"
+#include "platform.h"
 
 /* Ring-buffer conformance (main README §11): eviction at saturation, wrap
  * correctness, bounded memory — capacity stays capacity, O(window). */
@@ -56,9 +55,9 @@ static void test_null_safety(void){
 
 /* Keep the linker honest on the socket include set used by real emitters. */
 static void test_socket_include_compiles(void){
-    int fds[2];
-    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
-    close(fds[0]); close(fds[1]);
+    bluec_fd_t fds[2];
+    assert(bluec_test_stream_pair(fds) == 0);
+    bluec_close(fds[0]); bluec_close(fds[1]);
 }
 
 int main(void){

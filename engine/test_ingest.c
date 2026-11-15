@@ -2,8 +2,6 @@
 #include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <unistd.h>
 
 /* Ingest conformance (main README §11 + engine.README matrix): lifetime
  * counters bumped in the push path (never derived from rb_count), malformed
@@ -92,40 +90,40 @@ static void test_read_full_report_framing(void){
     sent.ts_ms = 12345;
     sent.payload_len = 4;
     ContactReport out;
-    int fds[2];
+    bluec_fd_t fds[2];
 
     // full report in one write
-    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
-    assert(write(fds[0], &sent, sizeof(sent)) == (ssize_t)sizeof(sent));
-    close(fds[0]);
+    assert(bluec_test_stream_pair(fds) == 0);
+    assert(bluec_write(fds[0], &sent, sizeof(sent)) == (int)sizeof(sent));
+    bluec_close(fds[0]);
     memset(&out, 0xAA, sizeof(out));
     assert(ingest_read_contact(fds[1], &out) == 1);
     assert(out.lane == LANE_API && out.kind == 3 && out.ts_ms == 12345);
 
     // clean EOF before any byte
-    close(fds[1]);
-    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
-    close(fds[0]);
+    bluec_close(fds[1]);
+    assert(bluec_test_stream_pair(fds) == 0);
+    bluec_close(fds[0]);
     assert(ingest_read_contact(fds[1], &out) == 0);
 
     // partial report then EOF -> malformed (never treated as a report)
-    close(fds[1]);
-    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
+    bluec_close(fds[1]);
+    assert(bluec_test_stream_pair(fds) == 0);
     ContactReport part = {0};
-    assert(write(fds[0], &part, 100) == 100);
-    close(fds[0]);
+    assert(bluec_write(fds[0], &part, 100) == 100);
+    bluec_close(fds[0]);
     assert(ingest_read_contact(fds[1], &out) == -1);
 
     // multiple reports drained in order on one connection
-    close(fds[1]);
-    assert(socketpair(AF_UNIX, SOCK_STREAM, 0, fds) == 0);
-    assert(write(fds[0], &sent, sizeof(sent)) == (ssize_t)sizeof(sent));
-    assert(write(fds[0], &sent, sizeof(sent)) == (ssize_t)sizeof(sent));
-    close(fds[0]);
+    bluec_close(fds[1]);
+    assert(bluec_test_stream_pair(fds) == 0);
+    assert(bluec_write(fds[0], &sent, sizeof(sent)) == (int)sizeof(sent));
+    assert(bluec_write(fds[0], &sent, sizeof(sent)) == (int)sizeof(sent));
+    bluec_close(fds[0]);
     assert(ingest_read_contact(fds[1], &out) == 1);
     assert(ingest_read_contact(fds[1], &out) == 1);
     assert(ingest_read_contact(fds[1], &out) == 0);
-    close(fds[1]);
+    bluec_close(fds[1]);
 
     // bad args
     assert(ingest_read_contact(-1, &out) == -1);

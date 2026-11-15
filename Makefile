@@ -42,11 +42,11 @@ $(DEMO): honeyjars/canary_demo.c honeyjars/canary_contact.h engine/ringbuffer.c 
 	$(CC) $(CFLAGS) -o $@ honeyjars/canary_demo.c engine/ringbuffer.c $(PLATFORM_SRC) $(LDLIBS)
 
 # focused C tests — plain asserts, no test framework (gcc + make only)
-$(TEST_RB): engine/test_ringbuffer.c engine/ringbuffer.c engine/ringbuffer.h engine/contracts.h
-	$(CC) $(CFLAGS) -o $@ engine/test_ringbuffer.c engine/ringbuffer.c
+$(TEST_RB): engine/test_ringbuffer.c engine/ringbuffer.c engine/ringbuffer.h engine/contracts.h engine/platform.h engine/platform_posix.c engine/platform_win32.c
+	$(CC) $(CFLAGS) -o $@ engine/test_ringbuffer.c engine/ringbuffer.c $(PLATFORM_SRC) $(LDLIBS)
 
 $(TEST_ING): engine/test_ingest.c engine/ingest.c engine/ringbuffer.c engine/ingest.h engine/ringbuffer.h engine/contracts.h engine/platform.h engine/platform_posix.c engine/platform_win32.c
-	$(CC) $(CFLAGS) -o $@ engine/test_ingest.c engine/ingest.c engine/ringbuffer.c $(PLATFORM_SRC)
+	$(CC) $(CFLAGS) -o $@ engine/test_ingest.c engine/ingest.c engine/ringbuffer.c $(PLATFORM_SRC) $(LDLIBS)
 
 $(TEST_BAS): engine/test_baseline.c engine/baseline.c engine/baseline.h
 	$(CC) $(CFLAGS) -o $@ engine/test_baseline.c engine/baseline.c $(LDLIBS)
@@ -100,6 +100,6 @@ smoke: $(ENGINE) $(CLIENT) $(WIRE_DEMO) test
 	exit $$status
 
 clean:
-	rm -f $(ENGINE) $(CLIENT) $(DEMO) $(TEST_RB) $(TEST_ING) $(TEST_BAS) $(WIRE_DEMO) $(WIRE_TEST) $(SMOKE_LOG) $(WIRE_LOG)
+	del /f /q $(ENGINE) $(CLIENT) $(DEMO) $(TEST_RB) $(TEST_ING) $(TEST_BAS) $(WIRE_DEMO) $(WIRE_TEST) $(SMOKE_LOG) $(WIRE_LOG) 2>nul || exit 0
 
 .PHONY: all smoke test clean

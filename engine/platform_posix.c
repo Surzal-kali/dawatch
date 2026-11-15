@@ -87,6 +87,11 @@ int bluec_recv(bluec_fd_t fd, void *buf, size_t n){
     return (int)recv(fd, buf, n, 0);
 }
 
+int bluec_test_stream_pair(bluec_fd_t fds[2]){
+    ensure_ready();
+    return socketpair(AF_UNIX, SOCK_STREAM, 0, fds);
+}
+
 bool bluec_would_block(void){
     return errno == EAGAIN || errno == EWOULDBLOCK;
 }

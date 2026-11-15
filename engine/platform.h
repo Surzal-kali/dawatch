@@ -64,6 +64,7 @@ void       bluec_close(bluec_fd_t fd);
 int        bluec_set_nonblocking(bluec_fd_t fd, bool on); /* 0 ok, -1 fail */
 int        bluec_write(bluec_fd_t fd, const void *buf, size_t n);
 int        bluec_recv(bluec_fd_t fd, void *buf, size_t n);
+int        bluec_test_stream_pair(bluec_fd_t fds[2]);
 
 /* ---- error predicates (use these INSTEAD of bare errno on sockets) ---- */
 bool bluec_would_block(void); /* EAGAIN/EWOULDBLOCK | WSAEWOULDBLOCK/EINPROGRESS */

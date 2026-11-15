@@ -97,6 +97,47 @@ int bluec_recv(bluec_fd_t fd, void *buf, size_t n){
     return recv((SOCKET)fd, (char*)buf, (int)n, 0);
 }
 
+int bluec_test_stream_pair(bluec_fd_t fds[2]){
+    SOCKET listener = INVALID_SOCKET;
+    SOCKET peer = INVALID_SOCKET;
+    SOCKET accepted = INVALID_SOCKET;
+    struct sockaddr_in addr;
+    int addr_len = sizeof(addr);
+
+    ensure_ready();
+    listener = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if(listener == INVALID_SOCKET) return -1;
+
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_family = AF_INET;
+    addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    addr.sin_port = htons(0);
+    if(bind(listener, (struct sockaddr*)&addr, sizeof(addr)) != 0 ||
+       listen(listener, 1) != 0 ||
+       getsockname(listener, (struct sockaddr*)&addr, &addr_len) != 0){
+        closesocket(listener);
+        return -1;
+    }
+
+    peer = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if(peer == INVALID_SOCKET ||
+       connect(peer, (struct sockaddr*)&addr, sizeof(addr)) != 0){
+        if(peer != INVALID_SOCKET) closesocket(peer);
+        closesocket(listener);
+        return -1;
+    }
+    accepted = accept(listener, NULL, NULL);
+    closesocket(listener);
+    if(accepted == INVALID_SOCKET){
+        closesocket(peer);
+        return -1;
+    }
+
+    fds[0] = (bluec_fd_t)peer;
+    fds[1] = (bluec_fd_t)accepted;
+    return 0;
+}
+
 bool bluec_would_block(void){
     int e = WSAGetLastError();
     return e == WSAEWOULDBLOCK || e == WSAEINPROGRESS;

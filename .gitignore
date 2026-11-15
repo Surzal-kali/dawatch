@@ -7,3 +7,4 @@ engine/test_ingest
 engine/test_baseline
 wires/wire_demo
 wires/test_wire
+*.exe
