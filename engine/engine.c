@@ -237,6 +237,7 @@ int main(void){
            (unsigned long long)s.ing.ingress[LANE_CANARY],
            (unsigned long long)s.ing.dropped,
            (unsigned long long)s.ing.malformed,
+
            (unsigned long long)s.ing.canary_alerts);
 
     for(int i=0;i<LANE_COUNT;i++){

@@ -1,0 +1,156 @@
+#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
+#include "wire_flow.h"
+#include "wire_monitor.h"
+#include "wire_source.h"
+#include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+#include <unistd.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+
+#define SOCKET_PATH "/tmp/bluec.socket"
+
+static uint64_t now_ms(void){
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec * 1000ULL + ts.tv_nsec / 1000000ULL;
+}
+
+static void msleep(long ms){
+    struct timespec req = { ms / 1000, (ms % 1000) * 1000000 };
+    nanosleep(&req, NULL);
+}
+
+/* Stream sockets may short-write; contacts are exactly sizeof(ContactReport)
+ * and the engine's hardened reader expects whole reports. */
+static int write_all(int fd, const void *buf, size_t len){
+    const char *p = buf;
+    while(len){
+        ssize_t n = write(fd, p, len);
+        if(n < 0){
+            if(errno == EINTR) continue;
+            return -1;
+        }
+        p += n;
+        len -= (size_t)n;
+    }
+    return 0;
+}
+
+typedef struct {
+    int fd;
+    unsigned sent_tick, sent_beacon, sent_new_peer;
+} DemoOut;
+
+static void on_contact(const ContactReport *cr, void *user){
+    DemoOut *out = user;
+    uint64_t tw = 0, tk = 0, tn = 0;
+    switch(cr->kind){
+    case WIRE_KIND_FLOW_TICK: {
+        WireTickStats st;
+        wire_unpack_flow_tick(cr, &st);
+        printf("[WIRE] sent FLOW_TICK flows=%u tempo=%.1f+-%.1fms up=%llu down=%llu\n",
+               st.flow_count, st.tempo_mean_ms, st.tempo_std_ms,
+               (unsigned long long)st.bytes_up, (unsigned long long)st.bytes_down);
+        tw = 1;
+        break;
+    }
+    case WIRE_KIND_BEACON_SUSPECT: {
+        WireBeaconStats st;
+        wire_unpack_beacon(cr, &st);
+        printf("[WIRE] sent BEACON_SUSPECT peer=%016llx mean_ms=%u jitter_ppm=%u n=%u\n",
+               (unsigned long long)st.peer_token, st.interval_mean_ms,
+               st.jitter_ppm, st.occurrences);
+        tk = 1;
+        break;
+    }
+    case WIRE_KIND_NEW_PEER: {
+        WirePeerStats st;
+        wire_unpack_new_peer(cr, &st);
+        printf("[WIRE] sent NEW_PEER peer=%016llx port=%u proto=%u\n",
+               (unsigned long long)st.peer_token, st.dst_port, st.protocol_class);
+        tn = 1;
+        break;
+    }
+    default:
+        return;
+    }
+    if(write_all(out->fd, cr, sizeof(*cr)) == 0){
+        out->sent_tick += tw;
+        out->sent_beacon += tk;
+        out->sent_new_peer += tn;
+    }else{
+        perror("write");
+    }
+}
+
+static int connect_engine(void){
+    for(int attempt = 0; attempt < 20; attempt++){
+        int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+        if(fd < 0){ perror("socket"); return -1; }
+        struct sockaddr_un addr = {0};
+        addr.sun_family = AF_UNIX;
+        strncpy(addr.sun_path, SOCKET_PATH, sizeof(addr.sun_path) - 1);
+        if(connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) return fd;
+        close(fd);
+        msleep(300);
+    }
+    fprintf(stderr, "wire_demo: engine socket not reachable at %s\n", SOCKET_PATH);
+    return -1;
+}
+
+int main(int argc, char **argv){
+    int duration_s = argc > 1 ? atoi(argv[1]) : 8;
+    if(duration_s <= 0) duration_s = 8;
+
+    DemoOut out = { .fd = -1 };
+    out.fd = connect_engine();
+    if(out.fd < 0) return 1;
+
+    WireSyntheticConfig scfg = {
+        .chatter_flows_per_sec = 30.0,
+        .beacon_interval_ms = 700,
+        .beacon_port = 8443,
+        .salt = 0xC0FFEEULL,     // demo: ids are already fiction
+        .seed = 42,              // fixed seed: reproducible demo runs
+        .anchor_ms = now_ms(),
+    };
+    WireSource *src = wire_synthetic_source_create(&scfg);
+    WireMonitor *mon = wire_monitor_create(WIRE_FLOW_CAPACITY_DEFAULT,
+                                           WIRE_PEER_CAPACITY_DEFAULT,
+                                           on_contact, &out);
+    if(!src || !mon){ fprintf(stderr, "wire_demo: init failed\n"); return 1; }
+
+    printf("[WIRE] demo: %ds, chatter 30 flows/s + beaconer @700ms on port 8443\n",
+           duration_s);
+
+    uint64_t start = now_ms();
+    uint64_t deadline = start + (uint64_t)duration_s * 1000ULL;
+    uint64_t next_window = start + 1000;
+    uint64_t now;
+    while((now = now_ms()) < deadline){
+        WireFlow f;
+        while(wire_source_next(src, &f, now))
+            wire_monitor_push(mon, &f);
+        if(now >= next_window){
+            wire_monitor_window_tick(mon, now);
+            next_window += 1000;
+        }
+        msleep(20);
+    }
+    wire_monitor_window_tick(mon, now);  // close the final partial window
+
+    printf("[WIRE] demo summary: flows_in_window=%zu peers_tracked=%zu "
+           "contacts: tick=%u beacon=%u new_peer=%u\n",
+           wire_monitor_flow_count(mon), wire_monitor_peer_count(mon),
+           out.sent_tick, out.sent_beacon, out.sent_new_peer);
+
+    wire_source_destroy(src);
+    wire_monitor_destroy(mon);
+    close(out.fd);
+    return 0;
+}

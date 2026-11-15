@@ -90,3 +90,12 @@ its criteria are demonstrable in the repo.
   line, canary cadence tick, swappable PRNG. Then lane build-out, wire lane
   first (flow-feature shape → contact emission → ring buffer → demo →
   tests, per the §11 lane conformance bar).
+- Done (2026-11-14, wire lane first milestone): `wires/` — flow-feature shape
+  (`WireFlow` 48B, salted peer tokens), monitor with window tempo/volume
+  aggregation + `NEW_PEER`/`BEACON_SUSPECT` cadence detection + bounded
+  ring/peer tables, pull-style `wire_source` interface with seeded Poisson
+  synthetic backend, `wire_demo` streaming contacts into the live engine
+  socket, `wires/test_wire.c` suite in `make test`, smoke runs the wire
+  demo and greps lane=0 ingest + FLOW_TICK/BEACON_SUSPECT emission. See
+  wires.README ticks. Open remainder: real continuous collector (taps)
+  behind the source interface.

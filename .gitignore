@@ -4,3 +4,5 @@ honeyjars/canary_client
 engine/engine_demo
 engine/test_ringbuffer
 engine/test_ingest
+wires/wire_demo
+wires/test_wire
