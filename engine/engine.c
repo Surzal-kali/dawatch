@@ -3,6 +3,7 @@
 #include "contracts.h"
 #include "ingest.h"
 #include "ringbuffer.h"
+#include "baseline.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -30,9 +31,7 @@ typedef struct {
     EngineConfig cfg;
     RingBuffer *lane_buffers[LANE_COUNT];
     IngestCounters ing;
-    double baseline_mean;
-    double baseline_var;
-    uint64_t baseline_n;
+    FeatureWindow *featwin;      /* sliding baseline: last N window features */
     uint64_t next_baseline_tick_ms;
     uint64_t next_random_tick_ms;
     uint64_t next_spike_tick_ms;
@@ -100,19 +99,14 @@ static double poisson_interval_ms(double lambda_per_min){
     return -log(u) / lambda_per_ms;
 }
 
-static void update_baseline(EngineState *s, double x){
-    s->baseline_n++;
-    double delta = x - s->baseline_mean;
-    s->baseline_mean += delta / s->baseline_n;
-    double delta2 = x - s->baseline_mean;
-    s->baseline_var += delta * delta2;
-}
-
+/* Windowed baseline (engine.README matrix): the sliding feature window is
+ * the baseline — recent behavior, no rotation boundary to time against.
+ * Scoring gates on n (warm-up honesty item stays open, gate unchanged). */
 static bool baseline_is_event(EngineState *s, double x){
-    if(s->baseline_n < 30) return false;
-    double std = sqrt(s->baseline_var / (s->baseline_n - 1));
+    if(featwin_n(s->featwin) < BASELINE_WARMUP_SAMPLES) return false;
+    double std = featwin_std(s->featwin);
     if(std < 1e-9) return false;
-    double z = fabs(x - s->baseline_mean) / std;
+    double z = fabs(x - featwin_mean(s->featwin)) / std;
     return z > s->cfg.k_sigma_event;
 }
 
@@ -181,9 +175,8 @@ int main(void){
     for(int i=0;i<LANE_COUNT;i++){
         s.lane_buffers[i] = rb_create(cfg.ringbuf_capacity, sizeof(ContactReport));
     }
-    s.baseline_mean = 0;
-    s.baseline_var = 0;
-    s.baseline_n = 0;
+    s.featwin = featwin_create();
+    if(!s.featwin){ fprintf(stderr, "featwin_alloc"); return 1; }
     s.now_ms = now_ms();
     s.next_baseline_tick_ms = s.now_ms + cfg.baseline_interval_ms;
     s.next_random_tick_ms = s.now_ms + (uint64_t)poisson_interval_ms(cfg.poisson_lambda_per_min);
@@ -206,10 +199,14 @@ int main(void){
         if(s.now_ms >= s.next_baseline_tick_ms){
             s.next_baseline_tick_ms += cfg.baseline_interval_ms;
             double x = simulate_window_feature(&s);
+            /* score against the baseline BEFORE this sample enters it */
+            double mean = featwin_mean(s.featwin);
+            double std = featwin_std(s.featwin);
             bool event = baseline_is_event(&s, x);
-            update_baseline(&s, x);
-            printf("[BASELINE] n=%llu mean=%.2f var=%.2f x=%.2f event=%d\n",
-                   (unsigned long long)s.baseline_n, s.baseline_mean, s.baseline_var, x, event);
+            featwin_push(s.featwin, x);
+            double z = std > 1e-9 ? fabs(x - mean) / std : 0.0;
+            printf("[BASELINE] n=%zu mean=%.2f var=%.2f z=%.2f x=%.2f event=%d\n",
+                   featwin_n(s.featwin), mean, std * std, z, x, event);
             if(event){
                 emit_route(ROUTE_BURST, "event deviation");
             }
@@ -243,6 +240,7 @@ int main(void){
     for(int i=0;i<LANE_COUNT;i++){
         rb_destroy(s.lane_buffers[i]);
     }
+    featwin_destroy(s.featwin);
     close(srv_fd);
     unlink(SOCKET_PATH);
     printf("Engine demo finished\n");

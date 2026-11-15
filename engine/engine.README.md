@@ -46,9 +46,21 @@ cross-lane fusion. Python owns orchestration and top-level integration.
       (`next_canary_tick_ms`) alongside baseline/random ticks; a real touch
       still promotes immediately and separately. Acceptance: demo run emits
       all three trigger types at least once; intervals show no fixed rhythm.
-- [ ] Windowed baseline stats: replace the cumulative Welford (var climbs
+- [x] Windowed baseline stats: replace the cumulative Welford (var climbs
       monotonically — ~58k by tick 30 in the stock run) with sliding-window or
       EWMA. Acceptance: sensitivity at t=X not weaker than t=X/10.
+      (2026-11-14 landed: `engine/baseline.{c,h}` — sliding window of the
+      last 512 fused feature samples, rolling sums re-derived once per
+      capacity-worth of pushes to bound drift; sample-variance std printed
+      and scored, no lifetime accumulation anywhere. Chose slide over
+      discrete windows/EWMA deliberately: the ring shifts every push, so
+      there is no rotation boundary or update tempo for an adversary to time
+      against (§9), and state is O(window) per the memory doctrine. Window
+      size is a documented horizon knob (`BASELINE_WINDOW_SAMPLES`), not a
+      magic fit. Acceptance shown: [BASELINE] var now settles (~34 by n=47)
+      instead of climbing; events fired at z≈4-6 throughout a 30s run —
+      8 of them, late ones just as strong as early ones. Smoke covers the
+      line; `engine/test_baseline.c` pins exactness/eviction/drift.)
 - [x] Per-lane monotonic contact counters bumped in the push path; never
       derive deltas from ring occupancy. Acceptance: counter test at ring
       saturation (push capacity x 10, deltas stay true). Ref: rb_count wraps

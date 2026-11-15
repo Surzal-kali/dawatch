@@ -85,11 +85,11 @@ its criteria are demonstrable in the repo.
   landed together via `engine/ingest.{c,h}`; `make test` now runs
   ring-buffer + ingest suites; smoke covers every implemented trigger
   including the event line. See §11 + engine.README ticks.
-- Next: remaining "Detection correctness" matrix items — windowed baseline
-  stats (cumulative Welford variance climbs monotonically), warm-up honesty
-  line, canary cadence tick, swappable PRNG. Then lane build-out, wire lane
-  first (flow-feature shape → contact emission → ring buffer → demo →
-  tests, per the §11 lane conformance bar).
+- Next: remaining "Detection correctness" matrix items — warm-up honesty
+  line, canary cadence tick, swappable PRNG. Windowed baseline stats landed
+  2026-11-14 (`engine/baseline.{c,h}`, sliding 512-sample feature window,
+  drift-bounded rolling sums). Then lane build-out continues (wire lane
+  first milestone landed 2026-11-14).
 - Done (2026-11-14, wire lane first milestone): `wires/` — flow-feature shape
   (`WireFlow` 48B, salted peer tokens), monitor with window tempo/volume
   aggregation + `NEW_PEER`/`BEACON_SUSPECT` cadence detection + bounded

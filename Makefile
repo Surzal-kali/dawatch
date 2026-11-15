@@ -8,6 +8,7 @@ CLIENT  := honeyjars/canary_client
 DEMO    := honeyjars/canary_demo
 TEST_RB := engine/test_ringbuffer
 TEST_ING := engine/test_ingest
+TEST_BAS := engine/test_baseline
 WIRE_DEMO := wires/wire_demo
 WIRE_TEST := wires/test_wire
 WIRE_LOG := /tmp/dawatch_wire_smoke.log
@@ -15,8 +16,8 @@ SMOKE_LOG := /tmp/dawatch_smoke.log
 
 all: $(ENGINE) $(CLIENT) $(DEMO)
 
-$(ENGINE): engine/engine.c engine/ingest.c engine/ringbuffer.c engine/contracts.h engine/ingest.h engine/ringbuffer.h
-	$(CC) $(CFLAGS) -o $@ engine/engine.c engine/ingest.c engine/ringbuffer.c $(LDLIBS)
+$(ENGINE): engine/engine.c engine/ingest.c engine/ringbuffer.c engine/baseline.c engine/contracts.h engine/ingest.h engine/ringbuffer.h engine/baseline.h
+	$(CC) $(CFLAGS) -o $@ engine/engine.c engine/ingest.c engine/ringbuffer.c engine/baseline.c $(LDLIBS)
 
 $(CLIENT): honeyjars/canary_client.c engine/contracts.h
 	$(CC) $(CFLAGS) -o $@ honeyjars/canary_client.c
@@ -31,9 +32,13 @@ $(TEST_RB): engine/test_ringbuffer.c engine/ringbuffer.c engine/ringbuffer.h eng
 $(TEST_ING): engine/test_ingest.c engine/ingest.c engine/ringbuffer.c engine/ingest.h engine/ringbuffer.h engine/contracts.h
 	$(CC) $(CFLAGS) -o $@ engine/test_ingest.c engine/ingest.c engine/ringbuffer.c
 
-test: $(TEST_RB) $(TEST_ING) $(WIRE_TEST)
+$(TEST_BAS): engine/test_baseline.c engine/baseline.c engine/baseline.h
+	$(CC) $(CFLAGS) -o $@ engine/test_baseline.c engine/baseline.c $(LDLIBS)
+
+test: $(TEST_RB) $(TEST_ING) $(TEST_BAS) $(WIRE_TEST)
 	$(TEST_RB)
 	$(TEST_ING)
+	$(TEST_BAS)
 	$(WIRE_TEST)
 
 $(WIRE_DEMO): wires/wire_demo.c wires/wire_flow.c wires/wire_flow.h wires/wire_monitor.c wires/wire_monitor.h wires/wire_source.c wires/wire_source.h engine/ringbuffer.c engine/ringbuffer.h engine/contracts.h
@@ -79,6 +84,6 @@ smoke: $(ENGINE) $(CLIENT) $(WIRE_DEMO) test
 	exit $$status
 
 clean:
-	rm -f $(ENGINE) $(CLIENT) $(DEMO) $(TEST_RB) $(TEST_ING) $(WIRE_DEMO) $(WIRE_TEST) $(SMOKE_LOG) $(WIRE_LOG)
+	rm -f $(ENGINE) $(CLIENT) $(DEMO) $(TEST_RB) $(TEST_ING) $(TEST_BAS) $(WIRE_DEMO) $(WIRE_TEST) $(SMOKE_LOG) $(WIRE_LOG)
 
 .PHONY: all smoke test clean
