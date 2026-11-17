@@ -246,3 +246,4 @@ as criteria, not prose.
 
 *Two-week reality check: full thing, done well, is more than two weeks. Lock the spine — loop + introspection burst + thresholded router over a small feature-extracted PoC store. Learned decision model + detector-inversion + full active honeynet are stretch.*
 
+The design is a **single loop** with organs, not three separate projects. The organs are the sensor (introspection burst), the brain (decision model), and the memory (PoC store). They communicate through well-defined boundary objects: `WindowFeatures`, `Score`, `PoCDescriptor`, and `Route`. The sampling controller manages the burst and baseline modes, while the hall monitor fuses data from multiple lanes. The active honeynet simulates life to deceive attackers, using behavioral indistinguishability rather than content fidelity.

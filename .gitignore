@@ -8,3 +8,5 @@ engine/test_baseline
 wires/wire_demo
 wires/test_wire
 *.exe
+*.log
+*.log.err

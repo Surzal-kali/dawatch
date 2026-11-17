@@ -27,8 +27,8 @@ TEST_ING := engine/test_ingest
 TEST_BAS := engine/test_baseline
 WIRE_DEMO := wires/wire_demo
 WIRE_TEST := wires/test_wire
-WIRE_LOG := /tmp/dawatch_wire_smoke.log
-SMOKE_LOG := /tmp/dawatch_smoke.log
+WIRE_LOG := dawatch_wire_smoke.log
+SMOKE_LOG := dawatch_smoke.log
 
 all: $(ENGINE) $(CLIENT) $(DEMO)
 
@@ -69,6 +69,30 @@ $(WIRE_TEST): wires/test_wire.c wires/wire_flow.c wires/wire_flow.h wires/wire_m
 # canary split), socket ingestion (canary AND wire), canary-touch ALERT,
 # wire cadence detection, and the clean-finish line.
 smoke: $(ENGINE) $(CLIENT) $(WIRE_DEMO) test
+ifeq ($(OS),Windows_NT)
+	@powershell -ExecutionPolicy Bypass -Command \
+	"Remove-Item -ErrorAction SilentlyContinue $(SMOKE_LOG), $(SMOKE_LOG).err, $(WIRE_LOG), $(WIRE_LOG).err; \
+	$$eng = Start-Process './$(ENGINE)' -RedirectStandardOutput $(SMOKE_LOG) -RedirectStandardError '$(SMOKE_LOG).err' -PassThru -WindowStyle Hidden; \
+	$$wire = Start-Process './$(WIRE_DEMO)' -ArgumentList '6' -RedirectStandardOutput $(WIRE_LOG) -RedirectStandardError '$(WIRE_LOG).err' -PassThru -WindowStyle Hidden; \
+	$$ok = 0; Start-Sleep -Seconds 1; \
+	for ($$i=1; $$i -le 10; $$i++) { if ((Start-Process './$(CLIENT)' -Wait -WindowStyle Hidden -PassThru).ExitCode -eq 0) { $$ok = 1; break } ; Start-Sleep -Milliseconds 500 }; \
+	Wait-Process -Id $$eng.Id -ErrorAction SilentlyContinue; \
+	Wait-Process -Id $$wire.Id -ErrorAction SilentlyContinue; \
+	$$status = 0; \
+	if (!(Select-String -Path $(SMOKE_LOG) -Pattern '\[BASELINE\]' -Quiet)) { Write-Host '[smoke] FAIL: no baseline ticks'; $$status = 1 }; \
+	if (!(Select-String -Path $(SMOKE_LOG) -Pattern '\[RANDOM\]' -Quiet)) { Write-Host '[smoke] FAIL: no random trigger fired'; $$status = 1 }; \
+	if (!(Select-String -Path $(SMOKE_LOG) -Pattern '\[BASELINE\].*event=1' -Quiet)) { Write-Host '[smoke] FAIL: no genuine event deviation fired'; $$status = 1 }; \
+	if (!(Select-String -Path $(SMOKE_LOG) -Pattern 'received contact lane=4' -Quiet)) { Write-Host '[smoke] FAIL: canary client contact not ingested'; $$status = 1 }; \
+	if (!(Select-String -Path $(SMOKE_LOG) -Pattern 'reason=canary touch' -Quiet)) { Write-Host '[smoke] FAIL: canary touch did not route ALERT'; $$status = 1 }; \
+	if (!(Select-String -Path $(SMOKE_LOG) -Pattern 'received contact lane=0' -Quiet)) { Write-Host '[smoke] FAIL: wire lane contacts not ingested'; $$status = 1 }; \
+	if (!(Select-String -Path $(WIRE_LOG) -Pattern '\[WIRE\] sent FLOW_TICK' -Quiet)) { Write-Host '[smoke] FAIL: wire lane emitted no window tick'; $$status = 1 }; \
+	if (!(Select-String -Path $(WIRE_LOG) -Pattern '\[WIRE\] sent BEACON_SUSPECT' -Quiet)) { Write-Host '[smoke] FAIL: wire lane found no cadence beacon'; $$status = 1 }; \
+	if (!(Select-String -Path $(SMOKE_LOG) -Pattern '\[CHECKIN\] Demo completed' -Quiet)) { Write-Host '[smoke] FAIL: engine demo did not finish cleanly'; $$status = 1 }; \
+	if ($$ok -eq 0) { Write-Host '[smoke] FAIL: canary_client never connected'; $$status = 1 }; \
+	if ($$status -eq 0) { Write-Host '[smoke] PASS: baseline + event + random + canary ALERT + ingestion all fired' } \
+	else { Write-Host '[smoke] engine log tail:'; Get-Content $(SMOKE_LOG) -Tail 5 }; \
+	exit $$status"
+else
 	@rm -f $(SMOKE_LOG) $(WIRE_LOG); \
 	$(ENGINE) > $(SMOKE_LOG) 2>&1 & \
 	eng=$$!; \
@@ -98,17 +122,18 @@ smoke: $(ENGINE) $(CLIENT) $(WIRE_DEMO) test
 		echo "[smoke] engine log tail:"; tail -n 5 $(SMOKE_LOG); \
 	fi; \
 	exit $$status
+endif
 
 clean:
 ifeq ($(OS),Windows_NT)
-	cmd.exe /c "if exist .\engine\engine_demo.exe del /f /q .\engine\engine_demo.exe"
-	cmd.exe /c "if exist .\honeyjars\canary_client.exe del /f /q .\honeyjars\canary_client.exe"
-	cmd.exe /c "if exist .\honeyjars\canary_demo.exe del /f /q .\honeyjars\canary_demo.exe"
-	cmd.exe /c "if exist .\engine\test_ringbuffer.exe del /f /q .\engine\test_ringbuffer.exe"
-	cmd.exe /c "if exist .\engine\test_ingest.exe del /f /q .\engine\test_ingest.exe"
-	cmd.exe /c "if exist .\engine\test_baseline.exe del /f /q .\engine\test_baseline.exe"
-	cmd.exe /c "if exist .\wires\wire_demo.exe del /f /q .\wires\wire_demo.exe"
-	cmd.exe /c "if exist .\wires\test_wire.exe del /f /q .\wires\test_wire.exe"
+	cmd.exe /c "if exist $(ENGINE).exe del /f /q $(ENGINE).exe"
+	cmd.exe /c "if exist $(CLIENT).exe del /f /q $(CLIENT).exe"
+	cmd.exe /c "if exist $(DEMO).exe del /f /q $(DEMO).exe"
+	cmd.exe /c "if exist $(TEST_RB).exe del /f /q $(TEST_RB).exe"
+	cmd.exe /c "if exist $(TEST_ING).exe del /f /q $(TEST_ING).exe"
+	cmd.exe /c "if exist $(TEST_BAS).exe del /f /q $(TEST_BAS).exe"
+	cmd.exe /c "if exist $(WIRE_DEMO).exe del /f /q $(WIRE_DEMO).exe"
+	cmd.exe /c "if exist $(WIRE_TEST).exe del /f /q $(WIRE_TEST).exe"
 else
 	rm -f $(ENGINE) $(CLIENT) $(DEMO) $(TEST_RB) $(TEST_ING) $(TEST_BAS) $(WIRE_DEMO) $(WIRE_TEST) $(SMOKE_LOG) $(WIRE_LOG)
 endif
